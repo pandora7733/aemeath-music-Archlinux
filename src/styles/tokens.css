@@ -1,0 +1,28 @@
+:root {
+    /* Background */
+    --bg-base: #000000;
+    --bg-elevated: #1c1c1e;
+    --bg-hover: #2c2c2e;
+    --bg-sidebar: #121212;
+  
+    /* Text */
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1a6;
+    --text-tertiary: #636366;
+  
+    /* Accent */
+    --accent: #fa2d48;
+    --accent-muted: rgba(250, 45, 72, 0.2);
+  
+    /* Layout */
+    --sidebar-width: 240px;
+    --player-height: 80px;
+  
+    /* Radius */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 12px;
+  
+    /* Typography */
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+}

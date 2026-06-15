@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@import "./styles/tokens.css";
+
+/* Tailwind 유틸리티로 tokens 노출 */
+@theme {
+  --color-bg-base: var(--bg-base);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-sidebar: var(--bg-sidebar);
+
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-tertiary: var(--text-tertiary);
+
+  --color-accent: var(--accent);
+  --color-accent-muted: var(--accent-muted);
+
+  --font-sans: var(--font-sans);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --spacing-sidebar: var(--sidebar-width);
+  --spacing-player: var(--player-height);
+}
+
+/* 전역 기본 스타일 */
+@layer base {
+  html, body, #root {
+    @apply h-full bg-bg-base text-primary font-sans antialiased;
+  }
+}
