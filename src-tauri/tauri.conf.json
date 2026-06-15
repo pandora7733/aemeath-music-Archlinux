@@ -12,9 +12,29 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "aemeath-music",
-        "width": 800,
-        "height": 600
+        "width": 1380,
+        "height": 900,
+        "minWidth": 1200,
+        "minHeight": 850,
+        "resizable": true,
+        "visible": true
+      },
+      {
+        "label": "mini",
+        "title": "aemeath-music mini",
+        "width": 380,
+        "height": 120,
+        "minWidth": 320,
+        "minHeight": 100,
+        "maxWidth": 480,
+        "maxHeight": 200,
+        "resizable": true,
+        "visible": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
       }
     ],
     "security": {
