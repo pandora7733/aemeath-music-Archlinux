@@ -6,4 +6,4 @@ export default function HomePage() {
         <p>HomePage 연결 확인</p>
       </div>
     );
-  }
+}
