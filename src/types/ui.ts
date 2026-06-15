@@ -1,0 +1,1 @@
+export type RightPanelMode = "closed" | "lyrics" | "queue";
