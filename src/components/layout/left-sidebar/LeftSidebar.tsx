@@ -83,7 +83,7 @@ export default function LeftSidebar() {
         <ul className="space-y-0.5">
           {playlistNav.map((item) => (
             <li key={item.path}>
-              <SidebarNavItem item={item} />
+              <SidebarNavItem item={item} end={item.path === "/playlists"} />
             </li>
           ))}
         </ul>
