@@ -1,21 +1,17 @@
-// TopPlayerBar.tsx
-import { usePlayer } from "../../../hooks/usePlayer";
-import { useRightPanel } from "../../../hooks/useRightPanel";
+import PlayerControlGroup from "./PlayerControlGroup";
+import TrackProgress from "./TrackProgress";
+import UtilityControlGroup from "./UtilityControlGroup";
 
 export default function TopPlayerBar() {
-  const { currentTrack, togglePlay, isPlaying } = usePlayer();
-  const { toggleLyrics, toggleQueue, mode } = useRightPanel();
-
   return (
-    <header>
-      <span>{currentTrack?.title}</span>
-      <button onClick={togglePlay}>{isPlaying ? "Pause" : "Play"}</button>
-      <button onClick={toggleLyrics} data-active={mode === "lyrics"}>
-        자막
-      </button>
-      <button onClick={toggleQueue} data-active={mode === "queue"}>
-        리스트
-      </button>
+    <header className="grid h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-bg-hover bg-bg-elevated/80 px-4 backdrop-blur">
+      <PlayerControlGroup />
+
+      <div className="flex justify-center">
+        <TrackProgress />
+      </div>
+
+      <UtilityControlGroup />
     </header>
   );
 }
