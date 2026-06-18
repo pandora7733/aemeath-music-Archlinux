@@ -12,6 +12,7 @@ import SongsPage from "./pages/library/SongsPage";
 import AllPlaylistsPage from "./pages/playlists/AllPlaylistsPage";
 import FavoritesPage from "./pages/playlists/FavoritesPage";
 import PlaylistDetailPage from "./pages/playlists/PlaylistDetailPage";
+import SettingsPage from "./pages/SettingsPage";
 
 export default function App() {
   return (
@@ -33,6 +34,8 @@ export default function App() {
               <Route path="/playlists/favorites" element={<FavoritesPage />} />
               <Route path="/playlists/:id" element={<PlaylistDetailPage />} />
             </Route>
+
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </RightPanelProvider>
       </PlayerProvider>

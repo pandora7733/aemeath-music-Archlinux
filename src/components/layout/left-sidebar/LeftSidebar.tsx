@@ -6,6 +6,7 @@ import {
   playlistNav,
   type NavItem,
 } from "../../../config/navigation";
+import SidebarFooter from "./SidebarFooter";
 
 function SidebarSection({ title }: { title: string }) {
   return (
@@ -88,6 +89,8 @@ export default function LeftSidebar() {
           ))}
         </ul>
       </nav>
+
+      <SidebarFooter />
     </aside>
   );
 }
