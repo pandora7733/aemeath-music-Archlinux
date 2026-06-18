@@ -23,6 +23,7 @@
 
   --spacing-sidebar: var(--sidebar-width);
   --spacing-player: var(--player-height);
+  --spacing-right-panel: var(--right-panel-width);
 }
 
 /* 전역 기본 스타일 */

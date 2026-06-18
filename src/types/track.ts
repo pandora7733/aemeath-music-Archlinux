@@ -5,4 +5,5 @@ export interface Track {
     album?: string;
     duration: number; // 초
     artworkUrl?: string;
+    lyrics?: string[]; // 한 줄당 한 항목
 }

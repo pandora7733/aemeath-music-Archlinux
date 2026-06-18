@@ -33,7 +33,22 @@ const PlayerContext = createContext<PlayerContextValue | null>(null);
 
 // Phase 1용 mock 데이터
 const MOCK_TRACKS: Track[] = [
-  { id: "1", title: "Sample Song", artist: "Sample Artist", duration: 210 },
+  {
+    id: "1",
+    title: "Sample Song",
+    artist: "Sample Artist",
+    duration: 210,
+    lyrics: [
+      "첫 번째 가사 줄입니다",
+      "두 번째 가사 줄입니다",
+      "세 번째 가사 줄입니다",
+      "네 번째 가사 줄입니다",
+      "다섯 번째 가사 줄입니다",
+      "여섯 번째 가사 줄입니다",
+      "일곱 번째 가사 줄입니다",
+      "여덟 번째 가사 줄입니다",
+    ],
+  },
   { id: "2", title: "Second Track", artist: "Another Artist", duration: 184 },
   { id: "3", title: "Third Tune", artist: "Some Band", duration: 247 },
 ];
