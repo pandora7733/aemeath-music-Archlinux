@@ -24,7 +24,7 @@ export default function UtilityControlGroup() {
           max={1}
           step={0.01}
           value={volume}
-          onChange={(e) => setVolume(Number(e.target.value))}
+          onChange={(e) => void setVolume(Number(e.target.value))}
           aria-label="볼륨 조절"
           className="h-1 w-20 cursor-pointer accent-[var(--accent)]"
         />

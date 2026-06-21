@@ -29,7 +29,7 @@ export default function TrackProgress() {
             max={duration || 0}
             step={1}
             value={currentTime}
-            onChange={(e) => seek(Number(e.target.value))}
+            onChange={(e) => void seek(Number(e.target.value))}
             aria-label="재생 위치"
             disabled={!currentTrack}
             className="peer absolute inset-0 z-10 h-4 w-full cursor-pointer opacity-0 disabled:cursor-default"

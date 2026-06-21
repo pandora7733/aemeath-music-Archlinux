@@ -1,3 +1,4 @@
+import { usePlayer } from "../../hooks/usePlayer";
 import { formatTime } from "../layout/top-player-bar/TimeText";
 import type { MediaItem } from "../../types/media";
 
@@ -7,15 +8,44 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function MediaRow({ item }: { item: MediaItem }) {
+interface MediaRowProps {
+  item: MediaItem;
+  queue: MediaItem[];
+}
+
+export default function MediaRow({ item, queue }: MediaRowProps) {
+  const { currentTrack, isPlaying, playFromLibrary } = usePlayer();
+  const isCurrent = currentTrack?.id === item.id;
+
   return (
-    <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-bg-hover">
+    <div
+      role="button"
+      tabIndex={0}
+      onDoubleClick={() => void playFromLibrary(item, queue)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          void playFromLibrary(item, queue);
+        }
+      }}
+      className={[
+        "flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 transition-colors",
+        isCurrent ? "bg-bg-hover" : "hover:bg-bg-hover",
+      ].join(" ")}
+    >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-bg-elevated text-xs font-semibold uppercase text-tertiary">
         {item.extension}
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-primary">{item.title}</p>
+        <p
+          className={[
+            "truncate text-sm",
+            isCurrent ? "font-semibold text-accent" : "font-medium text-primary",
+          ].join(" ")}
+        >
+          {item.title}
+          {isCurrent && isPlaying ? " · 재생 중" : ""}
+        </p>
         <p className="truncate text-xs text-tertiary">
           {item.artist ?? "알 수 없는 아티스트"} · {item.extension.toUpperCase()}
         </p>

@@ -17,7 +17,7 @@ export default function QueueTrackRow({
   return (
     <button
       type="button"
-      onClick={() => play(track)}
+      onClick={() => void play(track)}
       className={[
         "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors",
         isCurrent ? "bg-bg-hover" : "hover:bg-bg-hover",

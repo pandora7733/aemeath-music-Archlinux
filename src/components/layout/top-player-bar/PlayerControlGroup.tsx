@@ -15,6 +15,7 @@ export default function PlayerControlGroup() {
     isShuffle,
     repeatMode,
     queue,
+    currentTrack,
     togglePlay,
     toggleShuffle,
     cycleRepeat,
@@ -22,7 +23,7 @@ export default function PlayerControlGroup() {
     prev,
   } = usePlayer();
 
-  const hasQueue = queue.length > 0;
+  const hasQueue = queue.length > 0 && currentTrack != null;
 
   return (
     <div className="flex items-center gap-1">
@@ -34,20 +35,20 @@ export default function PlayerControlGroup() {
         <ShuffleIcon />
       </IconButton>
 
-      <IconButton label="이전 곡" onClick={prev} disabled={!hasQueue}>
+      <IconButton label="이전 곡" onClick={() => void prev()} disabled={!hasQueue}>
         <PrevIcon />
       </IconButton>
 
       <IconButton
         label={isPlaying ? "일시중지" : "재생"}
         variant="primary"
-        onClick={togglePlay}
+        onClick={() => void togglePlay()}
         disabled={!hasQueue}
       >
         {isPlaying ? <PauseIcon /> : <PlayIcon />}
       </IconButton>
 
-      <IconButton label="다음 곡" onClick={next} disabled={!hasQueue}>
+      <IconButton label="다음 곡" onClick={() => void next()} disabled={!hasQueue}>
         <NextIcon />
       </IconButton>
 

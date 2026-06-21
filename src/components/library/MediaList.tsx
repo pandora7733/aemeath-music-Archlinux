@@ -14,7 +14,7 @@ export default function MediaList({ items }: { items: MediaItem[] }) {
     <ul className="divide-y divide-bg-hover rounded-lg border border-bg-hover">
       {items.map((item) => (
         <li key={item.id}>
-          <MediaRow item={item} />
+          <MediaRow item={item} queue={items} />
         </li>
       ))}
     </ul>

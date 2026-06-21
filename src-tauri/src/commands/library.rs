@@ -36,7 +36,7 @@ pub fn scan_library(
         paths.into_iter().map(PathBuf::from).collect::<Vec<_>>()
     });
 
-    let scanned = library::scan_library(&state, roots)?;
+    let scanned = library::scan_library(state.inner(), roots)?;
     let root = crate::services::paths::music_dir().to_string_lossy().to_string();
 
     Ok(ScanLibraryResult { scanned, root })
@@ -63,5 +63,5 @@ pub fn get_library_items(
         _ => LibrarySort::Title,
     };
 
-    library::get_library_items(&state, kind, sort)
+    library::get_library_items(state.inner(), kind, sort)
 }
