@@ -1,0 +1,70 @@
+name: publish
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # AppImage strip 오류 방지 (Arch뿐 아니라 최신 Ubuntu에서도 발생 가능)
+          NO_STRIP: 'true'
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'aemeath-music ${{ github.ref_name }}'
+          releaseBody: |
+            ## Linux
+            - **AppImage** — 대부분의 배포판에서 바로 실행 (권장)
+            - **.deb** — Ubuntu / Debian / Mint
+            - **.rpm** — Fedora / RHEL / openSUSE
+
+            ## Windows / macOS
+            - Windows: `.msi` 또는 `.exe`
+            - macOS: `.dmg`
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
