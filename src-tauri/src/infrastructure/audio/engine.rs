@@ -1,14 +1,16 @@
-use std::fs::File;
-use std::io::BufReader;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{OutputStream, OutputStreamHandle, Sink};
 use tauri::{AppHandle, Emitter};
 
 use crate::models::playback_state::PlaybackStateDto;
+
+use super::symphonia_source::open_and_seek;
+
+const TICK_INTERVAL: Duration = Duration::from_millis(250);
 
 enum AudioCommand {
     Play {
@@ -56,18 +58,12 @@ impl LocalEngine {
         }
     }
 
-    fn play(&mut self, path: &PathBuf) -> Result<f64, String> {
-        self.stop_internal();
+    fn start_at(&mut self, path: &PathBuf, position_secs: f64) -> Result<f64, String> {
+        if let Some(sink) = self.sink.take() {
+            sink.stop();
+        }
 
-        let file = File::open(path).map_err(|e| format!("파일을 열 수 없습니다: {e}"))?;
-        let source = Decoder::new(BufReader::new(file))
-            .map_err(|e| format!("오디오 파일을 디코딩할 수 없습니다: {e}"))?;
-
-        let duration_secs = source
-            .total_duration()
-            .map(|d| d.as_secs_f64())
-            .unwrap_or(0.0);
-
+        let (source, duration_secs) = open_and_seek(path, position_secs)?;
         let sink = Sink::try_new(&self.handle)
             .map_err(|e| format!("오디오 싱크를 생성할 수 없습니다: {e}"))?;
         sink.set_volume(self.volume);
@@ -75,12 +71,18 @@ impl LocalEngine {
 
         self.sink = Some(sink);
         self.current_path = Some(path.clone());
-        self.duration_secs = duration_secs;
-        self.offset_secs = 0.0;
-        self.started_at = Some(Instant::now());
+        if duration_secs > 0.0 {
+            self.duration_secs = duration_secs;
+        }
+        self.offset_secs = position_secs;
         self.paused = false;
+        self.started_at = Some(Instant::now());
 
-        Ok(duration_secs)
+        Ok(self.duration_secs)
+    }
+
+    fn play(&mut self, path: &PathBuf) -> Result<f64, String> {
+        self.start_at(path, 0.0)
     }
 
     fn toggle_pause(&mut self) {
@@ -114,29 +116,14 @@ impl LocalEngine {
         let position_secs = position_secs.clamp(0.0, self.duration_secs);
         let was_paused = self.paused;
 
-        if let Some(sink) = self.sink.take() {
-            sink.stop();
-        }
-
-        let file = File::open(&path).map_err(|e| format!("파일을 열 수 없습니다: {e}"))?;
-        let source = Decoder::new(BufReader::new(file))
-            .map_err(|e| format!("오디오 파일을 디코딩할 수 없습니다: {e}"))?;
-        let skipped = source.skip_duration(Duration::from_secs_f64(position_secs));
-
-        let sink = Sink::try_new(&self.handle)
-            .map_err(|e| format!("오디오 싱크를 생성할 수 없습니다: {e}"))?;
-        sink.set_volume(self.volume);
-        sink.append(skipped);
+        self.start_at(&path, position_secs)?;
 
         if was_paused {
-            sink.pause();
-        }
-
-        self.sink = Some(sink);
-        self.offset_secs = position_secs;
-        self.paused = was_paused;
-        if !was_paused {
-            self.started_at = Some(Instant::now());
+            if let Some(sink) = self.sink.as_ref() {
+                sink.pause();
+            }
+            self.paused = true;
+            self.started_at = None;
         }
 
         Ok(())
@@ -191,6 +178,39 @@ impl LocalEngine {
         self.offset_secs = 0.0;
         self.started_at = None;
         self.paused = false;
+    }
+
+    fn handle_command(&mut self, command: AudioCommand) {
+        match command {
+            AudioCommand::Play { path, reply } => {
+                let result = self.play(&path).map(|duration| {
+                    let mut snapshot = self.snapshot();
+                    if snapshot.duration_secs == 0.0 {
+                        snapshot.duration_secs = duration;
+                    }
+                    snapshot
+                });
+                let _ = reply.send(result);
+            }
+            AudioCommand::TogglePause { reply } => {
+                self.toggle_pause();
+                let _ = reply.send(Ok(self.snapshot()));
+            }
+            AudioCommand::SetVolume { volume, reply } => {
+                self.set_volume(volume);
+                let _ = reply.send(Ok(self.snapshot()));
+            }
+            AudioCommand::Seek {
+                position_secs,
+                reply,
+            } => {
+                let result = self.seek(position_secs).map(|_| self.snapshot());
+                let _ = reply.send(result);
+            }
+            AudioCommand::GetState { reply } => {
+                let _ = reply.send(self.snapshot());
+            }
+        }
     }
 }
 
@@ -295,45 +315,25 @@ impl AudioPlayerHandle {
     }
 }
 
+fn drain_commands(engine: &mut LocalEngine, rx: &Receiver<AudioCommand>) {
+    while let Ok(command) = rx.try_recv() {
+        engine.handle_command(command);
+    }
+}
+
 fn run_audio_thread(app: AppHandle, rx: Receiver<AudioCommand>) -> Result<(), String> {
     let (_stream, handle) =
         OutputStream::try_default().map_err(|e| format!("오디오 출력을 초기화할 수 없습니다: {e}"))?;
     let mut engine = LocalEngine::new(handle);
 
     loop {
-        while let Ok(command) = rx.try_recv() {
-            match command {
-                AudioCommand::Play { path, reply } => {
-                    let result = engine.play(&path).map(|duration| {
-                        let mut snapshot = engine.snapshot();
-                        if snapshot.duration_secs == 0.0 {
-                            snapshot.duration_secs = duration;
-                        }
-                        snapshot
-                    });
-                    let _ = reply.send(result);
-                }
-                AudioCommand::TogglePause { reply } => {
-                    engine.toggle_pause();
-                    let _ = reply.send(Ok(engine.snapshot()));
-                }
-                AudioCommand::SetVolume { volume, reply } => {
-                    engine.set_volume(volume);
-                    let _ = reply.send(Ok(engine.snapshot()));
-                }
-                AudioCommand::Seek {
-                    position_secs,
-                    reply,
-                } => {
-                    let result = engine
-                        .seek(position_secs)
-                        .map(|_| engine.snapshot());
-                    let _ = reply.send(result);
-                }
-                AudioCommand::GetState { reply } => {
-                    let _ = reply.send(engine.snapshot());
-                }
+        match rx.recv_timeout(TICK_INTERVAL) {
+            Ok(command) => {
+                engine.handle_command(command);
+                drain_commands(&mut engine, &rx);
             }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => break,
         }
 
         if engine.has_track() && engine.sink_empty() {
@@ -343,9 +343,9 @@ fn run_audio_thread(app: AppHandle, rx: Receiver<AudioCommand>) -> Result<(), St
         } else if engine.has_track() {
             let _ = app.emit("player-tick", engine.snapshot());
         }
-
-        thread::sleep(Duration::from_millis(250));
     }
+
+    Ok(())
 }
 
 pub fn create_audio_player(app: AppHandle) -> Result<AudioPlayerHandle, String> {

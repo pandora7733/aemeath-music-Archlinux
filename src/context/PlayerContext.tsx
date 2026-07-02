@@ -68,6 +68,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const currentTrackRef = useRef<Track | null>(null);
   const repeatModeRef = useRef<RepeatMode>("off");
   const isShuffleRef = useRef(false);
+  const seekingRef = useRef(false);
 
   const [queue, setQueue] = useState<Track[]>([]);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -265,10 +266,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const seek = useCallback(
     async (time: number) => {
-      const state = await playerSeek(time);
-      syncFromState(state);
+      const clamped = Math.min(
+        duration > 0 ? duration : time,
+        Math.max(0, time),
+      );
+      seekingRef.current = true;
+      setCurrentTime(clamped);
+      try {
+        const state = await playerSeek(clamped);
+        syncFromState(state);
+      } finally {
+        seekingRef.current = false;
+      }
     },
-    [syncFromState],
+    [duration, syncFromState],
   );
 
   const setVolume = useCallback(
@@ -291,6 +302,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       unlistenTick = await listen<PlaybackState>("player-tick", (event) => {
+        if (seekingRef.current) return;
         syncFromState(event.payload);
       });
       unlistenEnded = await listen<PlaybackState>("player-ended", () => {
