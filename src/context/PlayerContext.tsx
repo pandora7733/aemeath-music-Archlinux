@@ -265,12 +265,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const seek = useCallback(
     async (time: number) => {
-      try {
-        const state = await playerSeek(time);
-        syncFromState(state);
-      } catch {
-        setCurrentTime(time);
-      }
+      const state = await playerSeek(time);
+      syncFromState(state);
     },
     [syncFromState],
   );

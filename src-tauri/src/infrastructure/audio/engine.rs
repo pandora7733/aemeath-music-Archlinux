@@ -106,11 +106,40 @@ impl LocalEngine {
         }
     }
 
-    fn seek(&mut self, position_secs: f64) {
-        self.offset_secs = position_secs.clamp(0.0, self.duration_secs);
-        if !self.paused {
+    fn seek(&mut self, position_secs: f64) -> Result<(), String> {
+        let Some(path) = self.current_path.clone() else {
+            return Ok(());
+        };
+
+        let position_secs = position_secs.clamp(0.0, self.duration_secs);
+        let was_paused = self.paused;
+
+        if let Some(sink) = self.sink.take() {
+            sink.stop();
+        }
+
+        let file = File::open(&path).map_err(|e| format!("파일을 열 수 없습니다: {e}"))?;
+        let source = Decoder::new(BufReader::new(file))
+            .map_err(|e| format!("오디오 파일을 디코딩할 수 없습니다: {e}"))?;
+        let skipped = source.skip_duration(Duration::from_secs_f64(position_secs));
+
+        let sink = Sink::try_new(&self.handle)
+            .map_err(|e| format!("오디오 싱크를 생성할 수 없습니다: {e}"))?;
+        sink.set_volume(self.volume);
+        sink.append(skipped);
+
+        if was_paused {
+            sink.pause();
+        }
+
+        self.sink = Some(sink);
+        self.offset_secs = position_secs;
+        self.paused = was_paused;
+        if !was_paused {
             self.started_at = Some(Instant::now());
         }
+
+        Ok(())
     }
 
     fn position_secs(&self) -> f64 {
@@ -296,8 +325,10 @@ fn run_audio_thread(app: AppHandle, rx: Receiver<AudioCommand>) -> Result<(), St
                     position_secs,
                     reply,
                 } => {
-                    engine.seek(position_secs);
-                    let _ = reply.send(Ok(engine.snapshot()));
+                    let result = engine
+                        .seek(position_secs)
+                        .map(|_| engine.snapshot());
+                    let _ = reply.send(result);
                 }
                 AudioCommand::GetState { reply } => {
                     let _ = reply.send(engine.snapshot());
