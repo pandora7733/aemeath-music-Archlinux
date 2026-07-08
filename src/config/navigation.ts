@@ -19,3 +19,7 @@ export const playlistNav: NavItem[] = [
   { label: "모든 플레이리스트", path: "/playlists" },
   { label: "즐겨찾는 노래", path: "/playlists/favorites" },
 ];
+
+export const downloadNav: NavItem[] = [
+  { label: "외부 곡 다운로드 하기", path: "/downloads/external" },
+];

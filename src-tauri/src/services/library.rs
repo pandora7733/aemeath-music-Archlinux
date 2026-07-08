@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::infrastructure::scanner;
-use crate::models::media_item::{MediaItem, MediaType};
+use crate::models::media_item::MediaItem;
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Copy)]
@@ -17,6 +17,8 @@ pub enum LibrarySort {
     Modified,
 }
 
+/// Scans the given roots (or defaults), extracts tags, and persists the result
+/// to the database. Local tracks that no longer exist are pruned.
 pub fn scan_library(state: &AppState, roots: Option<Vec<PathBuf>>) -> Result<usize, String> {
     let scan_roots = roots.unwrap_or_else(scanner::default_scan_roots);
     let mut collected = Vec::new();
@@ -28,14 +30,11 @@ pub fn scan_library(state: &AppState, roots: Option<Vec<PathBuf>>) -> Result<usi
 
     collected.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
 
-    let count = collected.len();
-    let mut library = state
-        .library
-        .write()
-        .map_err(|_| "라이브러리 상태 잠금에 실패했습니다.".to_string())?;
-    *library = collected;
+    let existing_paths: Vec<String> = collected.iter().map(|item| item.path.clone()).collect();
+    state.db.upsert_tracks(&collected)?;
+    state.db.prune_missing_local(&existing_paths)?;
 
-    Ok(count)
+    Ok(collected.len())
 }
 
 pub fn get_library_items(
@@ -43,29 +42,5 @@ pub fn get_library_items(
     kind: LibraryKind,
     sort: LibrarySort,
 ) -> Result<Vec<MediaItem>, String> {
-    let library = state
-        .library
-        .read()
-        .map_err(|_| "라이브러리 상태 잠금에 실패했습니다.".to_string())?;
-
-    let mut items: Vec<MediaItem> = library
-        .iter()
-        .filter(|item| match kind {
-            LibraryKind::All => true,
-            LibraryKind::Audio => item.media_type == MediaType::Audio,
-            LibraryKind::Video => item.media_type == MediaType::Video,
-        })
-        .cloned()
-        .collect();
-
-    match sort {
-        LibrarySort::Title => {
-            items.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
-        }
-        LibrarySort::Modified => {
-            items.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
-        }
-    }
-
-    Ok(items)
+    state.db.list_tracks(kind, sort)
 }

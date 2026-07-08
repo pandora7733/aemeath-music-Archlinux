@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
+  downloadNav,
   libraryNav,
   mainNav,
   playlistNav,
@@ -85,6 +86,15 @@ export default function LeftSidebar() {
           {playlistNav.map((item) => (
             <li key={item.path}>
               <SidebarNavItem item={item} end={item.path === "/playlists"} />
+            </li>
+          ))}
+        </ul>
+
+        <SidebarSection title="다운로드" />
+        <ul className="space-y-0.5">
+          {downloadNav.map((item) => (
+            <li key={item.path}>
+              <SidebarNavItem item={item} />
             </li>
           ))}
         </ul>

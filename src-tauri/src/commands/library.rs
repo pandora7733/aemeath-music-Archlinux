@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::models::library_groups::{AlbumGroup, ArtistGroup};
 use crate::models::media_item::MediaItem;
 use crate::services::library::{self, LibraryKind, LibrarySort};
 use crate::state::AppState;
@@ -27,17 +28,19 @@ pub struct GetLibraryItemsParams {
     pub sort: Option<String>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scan_library(
     state: State<'_, AppState>,
     params: Option<ScanLibraryParams>,
 ) -> Result<ScanLibraryResult, String> {
-    let roots = params.and_then(|p| p.roots).map(|paths| {
-        paths.into_iter().map(PathBuf::from).collect::<Vec<_>>()
-    });
+    let roots = params
+        .and_then(|p| p.roots)
+        .map(|paths| paths.into_iter().map(PathBuf::from).collect::<Vec<_>>());
 
     let scanned = library::scan_library(state.inner(), roots)?;
-    let root = crate::services::paths::music_dir().to_string_lossy().to_string();
+    let root = crate::services::paths::music_dir()
+        .to_string_lossy()
+        .to_string();
 
     Ok(ScanLibraryResult { scanned, root })
 }
@@ -64,4 +67,39 @@ pub fn get_library_items(
     };
 
     library::get_library_items(state.inner(), kind, sort)
+}
+
+#[tauri::command]
+pub fn get_recently_added(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+) -> Result<Vec<MediaItem>, String> {
+    state.inner().db.recently_added(limit.unwrap_or(100))
+}
+
+#[tauri::command]
+pub fn get_albums(state: State<'_, AppState>) -> Result<Vec<AlbumGroup>, String> {
+    state.inner().db.albums()
+}
+
+#[tauri::command]
+pub fn get_album_tracks(
+    state: State<'_, AppState>,
+    artist: String,
+    album: String,
+) -> Result<Vec<MediaItem>, String> {
+    state.inner().db.album_tracks(&artist, &album)
+}
+
+#[tauri::command]
+pub fn get_artists(state: State<'_, AppState>) -> Result<Vec<ArtistGroup>, String> {
+    state.inner().db.artists()
+}
+
+#[tauri::command]
+pub fn get_artist_tracks(
+    state: State<'_, AppState>,
+    artist: String,
+) -> Result<Vec<MediaItem>, String> {
+    state.inner().db.artist_tracks(&artist)
 }

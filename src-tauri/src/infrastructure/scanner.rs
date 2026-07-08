@@ -1,9 +1,9 @@
-use std::collections::hash_map::DefaultHasher;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::models::media_item::{MediaItem, MediaType};
+use crate::infrastructure::tags::read_tags;
+use crate::models::media_item::{MediaItem, MediaSource, MediaType};
+use crate::services::paths;
 
 const AUDIO_EXTENSIONS: &[&str] = &[
     "mp3", "flac", "wav", "m4a", "ogg", "opus", "aac", "wma", "aiff", "alac", "webm",
@@ -50,7 +50,9 @@ fn collect_files(current: &Path, items: &mut Vec<MediaItem>) -> Result<(), Strin
     Ok(())
 }
 
-fn media_item_from_path(path: &Path) -> Option<MediaItem> {
+/// Builds a `MediaItem` from a file path, reading embedded tags for audio files
+/// and extracting cover art into the covers cache directory.
+pub fn media_item_from_path(path: &Path) -> Option<MediaItem> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
     let media_type = if AUDIO_EXTENSIONS.contains(&extension.as_str()) {
         MediaType::Audio
@@ -74,24 +76,58 @@ fn media_item_from_path(path: &Path) -> Option<MediaItem> {
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or(0);
 
+    let id = hash_path(&absolute_path);
+
+    let mut title = file_name;
+    let mut artist = None;
+    let mut album = None;
+    let mut duration_secs = None;
+    let mut cover_path = None;
+
+    if media_type == MediaType::Audio {
+        let tags = read_tags(path);
+        if let Some(tag_title) = tags.title {
+            title = tag_title;
+        }
+        artist = tags.artist;
+        album = tags.album;
+        duration_secs = tags.duration_secs;
+
+        if let Some(cover_bytes) = tags.cover_art {
+            cover_path = save_cover_art(&id, &cover_bytes);
+        }
+    }
+
     Some(MediaItem {
-        id: hash_path(&absolute_path),
+        id,
         path: absolute_path,
-        title: file_name,
-        artist: None,
-        album: None,
-        duration_secs: None,
+        title,
+        artist,
+        album,
+        duration_secs,
         media_type,
         extension,
         file_size: metadata.len(),
         modified_at,
+        cover_path,
+        added_at: 0,
+        source: MediaSource::Local,
     })
 }
 
-fn hash_path(path: &str) -> String {
-    let mut hasher = DefaultHasher::new();
-    path.hash(&mut hasher);
-    format!("{:x}", hasher.finish())
+/// Saves embedded cover art to the covers cache dir. Returns the saved path.
+fn save_cover_art(track_id: &str, bytes: &[u8]) -> Option<String> {
+    let covers = paths::covers_dir();
+    fs::create_dir_all(&covers).ok()?;
+    let target = covers.join(format!("{track_id}.jpg"));
+    if !target.exists() {
+        fs::write(&target, bytes).ok()?;
+    }
+    Some(target.to_string_lossy().to_string())
+}
+
+pub fn hash_path(path: &str) -> String {
+    blake3::hash(path.as_bytes()).to_hex().to_string()
 }
 
 pub fn default_scan_roots() -> Vec<PathBuf> {

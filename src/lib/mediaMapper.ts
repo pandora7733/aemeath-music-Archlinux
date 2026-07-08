@@ -1,3 +1,4 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { MediaItem } from "../types/media";
 import type { Track } from "../types/track";
 
@@ -9,6 +10,7 @@ export function mediaItemToTrack(item: MediaItem): Track {
     artist: item.artist ?? "알 수 없는 아티스트",
     album: item.album ?? undefined,
     duration: item.durationSecs ?? 0,
+    artworkUrl: item.coverPath ? convertFileSrc(item.coverPath) : undefined,
   };
 }
 

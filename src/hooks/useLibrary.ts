@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getLibraryItems, scanLibrary } from "../lib/tauri";
+import { getLibraryItems, onLibraryUpdated, scanLibrary } from "../lib/tauri";
 import type { GetLibraryItemsParams, MediaItem } from "../types/media";
 
 export function useLibrary(params?: GetLibraryItemsParams) {
@@ -31,6 +31,20 @@ export function useLibrary(params?: GetLibraryItemsParams) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Downloaded tracks are registered by the backend; refresh the list without
+  // triggering a full rescan.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void onLibraryUpdated(() => {
+      getLibraryItems({ kind, sort })
+        .then(setItems)
+        .catch(() => {});
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [kind, sort]);
 
   return { items, loading, error, scannedRoot, refresh };
 }

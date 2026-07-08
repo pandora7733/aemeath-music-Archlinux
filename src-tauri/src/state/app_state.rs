@@ -1,18 +1,29 @@
-use std::sync::RwLock;
+use std::sync::Arc;
 
 use crate::infrastructure::audio::AudioPlayerHandle;
-use crate::models::media_item::MediaItem;
+use crate::infrastructure::db::Database;
+use crate::services::download::DownloadService;
+use crate::services::plugin_manager::PluginManager;
 
 pub struct AppState {
-    pub library: RwLock<Vec<MediaItem>>,
     pub player: AudioPlayerHandle,
+    pub db: Arc<Database>,
+    pub plugins: PluginManager,
+    pub downloads: DownloadService,
 }
 
 impl AppState {
-    pub fn new(player: AudioPlayerHandle) -> Self {
+    pub fn new(
+        player: AudioPlayerHandle,
+        db: Arc<Database>,
+        plugins: PluginManager,
+        downloads: DownloadService,
+    ) -> Self {
         Self {
-            library: RwLock::new(Vec::new()),
             player,
+            db,
+            plugins,
+            downloads,
         }
     }
 }
