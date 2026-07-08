@@ -103,3 +103,10 @@ pub fn get_artist_tracks(
 ) -> Result<Vec<MediaItem>, String> {
     state.inner().db.artist_tracks(&artist)
 }
+
+#[tauri::command]
+pub fn get_music_root() -> Result<String, String> {
+    Ok(crate::services::paths::music_dir()
+        .to_string_lossy()
+        .to_string())
+}

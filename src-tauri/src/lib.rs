@@ -36,6 +36,7 @@ pub fn run() {
             commands::library::get_album_tracks,
             commands::library::get_artists,
             commands::library::get_artist_tracks,
+            commands::library::get_music_root,
             commands::favorites::favorite_toggle,
             commands::favorites::favorite_ids,
             commands::favorites::favorite_list,

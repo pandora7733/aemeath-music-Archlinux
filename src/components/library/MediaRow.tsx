@@ -88,7 +88,7 @@ export default function MediaRow({ item, queue, trailingAction }: MediaRowProps)
         }
       }}
       className={[
-        "group flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 transition-colors",
+        "group flex cursor-pointer items-center gap-3 px-2 py-2 transition-colors",
         isCurrent ? "bg-bg-hover" : "hover:bg-bg-hover",
       ].join(" ")}
     >

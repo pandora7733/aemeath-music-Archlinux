@@ -61,6 +61,10 @@ export async function getArtistTracks(artist: string): Promise<MediaItem[]> {
   return invoke<MediaItem[]>("get_artist_tracks", { artist });
 }
 
+export async function getMusicRoot(): Promise<string> {
+  return invoke<string>("get_music_root");
+}
+
 // ----- Favorites -----
 
 export async function favoriteToggle(trackId: string): Promise<boolean> {
