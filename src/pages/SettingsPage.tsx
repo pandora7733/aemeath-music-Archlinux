@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePlugin } from "../hooks/usePlugin";
+import { useTheme } from "../context/ThemeContext";
 import {
   getExternalDownloadSettings,
   resetExternalDownloadSettings,
@@ -269,6 +270,46 @@ function ExternalDownloadSection() {
   );
 }
 
+function ThemeSection() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <section className="w-full max-w-xl rounded-xl border border-bg-hover bg-bg-elevated p-5">
+      <h2 className="text-base font-bold text-primary">화면 모드</h2>
+      <p className="mt-1 text-xs text-tertiary">
+        앱 테마를 직접 선택할 수 있으며, 설정은 다음 실행 시에도 유지됩니다.
+      </p>
+
+      <div className="mt-4 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setTheme("dark")}
+          className={[
+            "rounded-md px-3 py-1.5 text-sm transition-colors",
+            theme === "dark"
+              ? "bg-accent text-white"
+              : "bg-bg-hover text-secondary hover:text-primary",
+          ].join(" ")}
+        >
+          다크 모드
+        </button>
+        <button
+          type="button"
+          onClick={() => setTheme("light")}
+          className={[
+            "rounded-md px-3 py-1.5 text-sm transition-colors",
+            theme === "light"
+              ? "bg-accent text-white"
+              : "bg-bg-hover text-secondary hover:text-primary",
+          ].join(" ")}
+        >
+          라이트 모드
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const navigate = useNavigate();
 
@@ -287,6 +328,7 @@ export default function SettingsPage() {
       </header>
 
       <main className="flex flex-1 flex-col items-center gap-6 overflow-y-auto p-8">
+        <ThemeSection />
         <PluginSection />
         <ExternalDownloadSection />
       </main>
