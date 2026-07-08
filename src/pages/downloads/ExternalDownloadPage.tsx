@@ -7,7 +7,8 @@ export default function ExternalDownloadPage() {
   const [lastRequestedUrl, setLastRequestedUrl] = useState<string | null>(null);
   const [showCompletedLabel, setShowCompletedLabel] = useState(false);
   const { states, lastError, startExternalUrl, cancel } = useDownloads();
-  const { status, statusLoading, installing, progress, install } = usePlugin();
+  const { status, statusLoading, installing, progress, install, error: pluginError } =
+    usePlugin();
 
   const activeKey = lastRequestedUrl ?? url.trim();
   const state = activeKey ? states.get(activeKey) : undefined;
@@ -106,7 +107,9 @@ export default function ExternalDownloadPage() {
           </div>
         </form>
       )}
-      {lastError && <p className="mt-4 text-sm text-accent">{lastError}</p>}
+      {(pluginError || lastError) && (
+        <p className="mt-4 text-sm text-accent">{pluginError ?? lastError}</p>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::time::Duration;
 
+use crate::infrastructure::network;
 use crate::models::discovery::DiscoveryTrack;
 
 const USER_AGENT: &str = "aemeath-music/0.1 (https://github.com/aemeath/aemeath-music)";
@@ -46,7 +47,13 @@ pub fn search(query: &str) -> Result<Vec<DiscoveryTrack>, String> {
         ])
         .send()
         .and_then(|r| r.error_for_status())
-        .map_err(|e| format!("iTunes 검색 요청 실패: {e}"))?;
+        .map_err(|e| {
+            if network::is_reqwest_offline(&e) {
+                network::offline_message("외부 API에서 곡 정보를 가져올 수 없습니다")
+            } else {
+                format!("iTunes 검색 요청 실패: {e}")
+            }
+        })?;
 
     let parsed: ItunesResponse = resp
         .json()

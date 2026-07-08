@@ -2,11 +2,34 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+use crate::infrastructure::network;
 use crate::services::paths;
 
 const YTDLP_RELEASE_URL: &str =
     "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
 const USER_AGENT: &str = "aemeath-music/0.1 (https://github.com/aemeath/aemeath-music)";
+
+fn map_install_request_error(err: reqwest::Error) -> String {
+    if network::is_reqwest_offline(&err) {
+        return network::offline_message("yt-dlp 플러그인을 다운로드할 수 없습니다");
+    }
+    format!("yt-dlp 다운로드 요청 실패: {err}")
+}
+
+fn map_stream_read_error(err: std::io::Error) -> String {
+    let text = err.to_string();
+    if network::is_network_error_text(&text) {
+        return network::offline_message("yt-dlp 플러그인을 다운로드할 수 없습니다");
+    }
+    format!("다운로드 스트림 읽기 실패: {err}")
+}
+
+fn map_download_failure(stderr: &str) -> String {
+    if network::is_network_error_text(stderr) {
+        return network::offline_message("yt-dlp로 곡을 다운로드할 수 없습니다");
+    }
+    format!("yt-dlp 다운로드 실패: {stderr}")
+}
 
 /// Absolute path where the yt-dlp binary is (or will be) installed.
 pub fn binary_path() -> PathBuf {
@@ -74,7 +97,7 @@ pub fn install(mut on_progress: impl FnMut(f64)) -> Result<(), String> {
     let mut response = client
         .get(YTDLP_RELEASE_URL)
         .send()
-        .map_err(|e| format!("yt-dlp 다운로드 요청 실패: {e}"))?;
+        .map_err(map_install_request_error)?;
 
     if !response.status().is_success() {
         return Err(format!("yt-dlp 다운로드 실패: HTTP {}", response.status()));
@@ -91,7 +114,7 @@ pub fn install(mut on_progress: impl FnMut(f64)) -> Result<(), String> {
     loop {
         let read = response
             .read(&mut buffer)
-            .map_err(|e| format!("다운로드 스트림 읽기 실패: {e}"))?;
+            .map_err(map_stream_read_error)?;
         if read == 0 {
             break;
         }
@@ -163,7 +186,7 @@ pub fn download_audio_with_pid(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("yt-dlp 다운로드 실패: {stderr}"));
+        return Err(map_download_failure(&stderr));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -220,7 +243,7 @@ pub fn download_from_url_as_mp3_with_pid(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("yt-dlp 다운로드 실패: {stderr}"));
+        return Err(map_download_failure(&stderr));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);

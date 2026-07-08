@@ -2,6 +2,7 @@ use std::io::Write;
 use std::time::Duration;
 
 use crate::infrastructure::discovery::{deezer, itunes};
+use crate::infrastructure::network;
 use crate::models::discovery::DiscoveryTrack;
 use crate::services::paths;
 
@@ -43,9 +44,21 @@ pub fn fetch_preview(preview_url: &str, external_id: &str) -> Result<String, Str
         .get(preview_url)
         .send()
         .and_then(|r| r.error_for_status())
-        .map_err(|e| format!("미리듣기 요청 실패: {e}"))?
+        .map_err(|e| {
+            if network::is_reqwest_offline(&e) {
+                network::offline_message("미리듣기 파일을 가져올 수 없습니다")
+            } else {
+                format!("미리듣기 요청 실패: {e}")
+            }
+        })?
         .bytes()
-        .map_err(|e| format!("미리듣기 응답 읽기 실패: {e}"))?;
+        .map_err(|e| {
+            if network::is_reqwest_offline(&e) {
+                network::offline_message("미리듣기 파일을 가져올 수 없습니다")
+            } else {
+                format!("미리듣기 응답 읽기 실패: {e}")
+            }
+        })?;
 
     let mut file =
         std::fs::File::create(&target).map_err(|e| format!("미리듣기 파일 생성 실패: {e}"))?;

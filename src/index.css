@@ -32,3 +32,33 @@
     @apply h-full bg-bg-base text-primary font-sans antialiased;
   }
 }
+
+@layer components {
+  .marquee {
+    position: relative;
+  }
+
+  .marquee-track {
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    width: max-content;
+  }
+
+  .marquee-item {
+    white-space: nowrap;
+  }
+
+  .marquee-enabled .marquee-track {
+    animation: marquee-scroll var(--marquee-duration, 10s) linear infinite;
+  }
+}
+
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--marquee-distance, 0px)));
+  }
+}

@@ -8,6 +8,7 @@ import {
   onDownloadError,
   onDownloadProgress,
 } from "../lib/tauri";
+import { normalizeDownloadError } from "../lib/networkError";
 import type { DownloadTask } from "../types/media";
 
 export type DownloadState = "downloading" | "done" | "error";
@@ -25,7 +26,8 @@ export function useDownloads() {
       const task = await downloadTrack(query);
       setTaskIdsByQuery((prev) => new Map(prev).set(query, task.id));
     } catch (err) {
-      setLastError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setLastError(normalizeDownloadError(message));
       setStates((prev) => new Map(prev).set(query, "error"));
     }
   }, []);
@@ -37,7 +39,8 @@ export function useDownloads() {
       const task = await downloadExternalUrl(url);
       setTaskIdsByQuery((prev) => new Map(prev).set(url, task.id));
     } catch (err) {
-      setLastError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setLastError(normalizeDownloadError(message));
       setStates((prev) => new Map(prev).set(url, "error"));
     }
   }, []);
@@ -50,7 +53,8 @@ export function useDownloads() {
         await downloadCancel(taskId);
         setStates((prev) => new Map(prev).set(query, "error"));
       } catch (err) {
-        setLastError(err instanceof Error ? err.message : String(err));
+        const message = err instanceof Error ? err.message : String(err);
+        setLastError(normalizeDownloadError(message));
       }
     },
     [taskIdsByQuery],
@@ -98,7 +102,7 @@ export function useDownloads() {
           }
         }),
         await onDownloadError((event) => {
-          setLastError(event.message ?? "다운로드 실패");
+          setLastError(normalizeDownloadError(event.message ?? "다운로드 실패"));
           setStates((prev) => new Map(prev).set(event.query, "error"));
           if (event.id) {
             setTaskIdsByQuery((prev) => new Map(prev).set(event.query, event.id!));

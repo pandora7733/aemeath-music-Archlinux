@@ -1,11 +1,15 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { usePlayer } from "../../../hooks/usePlayer";
 import TimeText from "./TimeText";
 
 export default function TrackProgress() {
   const { currentTrack, currentTime, duration, seek } = usePlayer();
   const [scrubTime, setScrubTime] = useState<number | null>(null);
+  const [shouldMarquee, setShouldMarquee] = useState(false);
+  const [marqueeDistance, setMarqueeDistance] = useState(0);
   const scrubValueRef = useRef(0);
+  const titleWrapRef = useRef<HTMLDivElement | null>(null);
+  const titleTextRef = useRef<HTMLSpanElement | null>(null);
 
   const displayTime = scrubTime ?? currentTime;
   const pct = duration > 0 ? (displayTime / duration) * 100 : 0;
@@ -15,14 +19,71 @@ export default function TrackProgress() {
     void seek(time);
   };
 
+  useEffect(() => {
+    if (!currentTrack) {
+      setShouldMarquee(false);
+      setMarqueeDistance(0);
+      return;
+    }
+
+    const measure = () => {
+      const wrap = titleWrapRef.current;
+      const text = titleTextRef.current;
+      if (!wrap || !text) return;
+
+      const overflow = text.scrollWidth > wrap.clientWidth + 2;
+      setShouldMarquee(overflow);
+      if (overflow) {
+        setMarqueeDistance(text.scrollWidth + 24);
+      }
+    };
+
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    if (titleWrapRef.current) observer.observe(titleWrapRef.current);
+    if (titleTextRef.current) observer.observe(titleTextRef.current);
+
+    return () => observer.disconnect();
+  }, [currentTrack?.title]);
+
+  const marqueeStyle: CSSProperties = shouldMarquee
+    ? ({
+        ["--marquee-distance" as string]: `${marqueeDistance}px`,
+        ["--marquee-duration" as string]: `${Math.max(8, marqueeDistance / 36)}s`,
+      } as CSSProperties)
+    : {};
+
   return (
     <div className="flex w-full max-w-xl flex-col items-center gap-1">
       {currentTrack ? (
-        <div className="flex items-baseline gap-2 truncate text-center text-sm">
-          <span className="truncate font-medium text-primary">
-            {currentTrack.title}
+        <div className="flex w-full min-w-0 items-baseline gap-2 text-sm">
+          <div
+            ref={titleWrapRef}
+            className={[
+              "min-w-0 flex-1 overflow-hidden",
+              shouldMarquee ? "marquee marquee-enabled" : "",
+            ].join(" ")}
+            style={marqueeStyle}
+          >
+            {shouldMarquee ? (
+              <div className="marquee-track">
+                <span ref={titleTextRef} className="marquee-item font-medium text-primary">
+                  {currentTrack.title}
+                </span>
+                <span aria-hidden className="marquee-item font-medium text-primary">
+                  {currentTrack.title}
+                </span>
+              </div>
+            ) : (
+              <span ref={titleTextRef} className="block truncate font-medium text-primary">
+                {currentTrack.title}
+              </span>
+            )}
+          </div>
+          <span className="max-w-40 shrink-0 truncate text-tertiary">
+            {currentTrack.artist}
           </span>
-          <span className="truncate text-tertiary">{currentTrack.artist}</span>
         </div>
       ) : (
         <span className="text-sm text-tertiary">재생 중인 곡 없음</span>

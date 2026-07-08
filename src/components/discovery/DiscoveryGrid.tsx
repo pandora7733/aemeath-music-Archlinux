@@ -3,6 +3,7 @@ import { usePlayer } from "../../hooks/usePlayer";
 import { usePlugin } from "../../hooks/usePlugin";
 import { useDownloads } from "../../hooks/useDownloads";
 import { discoveryFetchPreview } from "../../lib/tauri";
+import { normalizePreviewError } from "../../lib/networkError";
 import type { DiscoveryTrack } from "../../types/media";
 import DiscoveryCard from "./DiscoveryCard";
 import PluginConsentDialog from "./PluginConsentDialog";
@@ -40,7 +41,8 @@ export default function DiscoveryGrid({ tracks }: { tracks: DiscoveryTrack[] }) 
           artworkUrl: track.coverUrl ?? undefined,
         });
       } catch (err) {
-        setPreviewError(err instanceof Error ? err.message : String(err));
+        const message = err instanceof Error ? err.message : String(err);
+        setPreviewError(normalizePreviewError(message));
       }
     },
     [play],

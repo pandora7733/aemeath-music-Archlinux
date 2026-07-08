@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::time::Duration;
 
+use crate::infrastructure::network;
 use crate::models::discovery::DiscoveryTrack;
 
 const USER_AGENT: &str = "aemeath-music/0.1 (https://github.com/aemeath/aemeath-music)";
@@ -49,6 +50,13 @@ fn client() -> Result<reqwest::blocking::Client, String> {
         .map_err(|e| format!("HTTP 클라이언트 생성 실패: {e}"))
 }
 
+fn map_request_error(label: &str, err: reqwest::Error) -> String {
+    if network::is_reqwest_offline(&err) {
+        return network::offline_message("외부 API에서 곡 정보를 가져올 수 없습니다");
+    }
+    format!("{label} 실패: {err}")
+}
+
 fn map_track(track: DeezerTrack) -> DiscoveryTrack {
     let (album_title, cover_url) = match track.album {
         Some(album) => (album.title, album.cover_medium),
@@ -75,7 +83,7 @@ pub fn chart() -> Result<Vec<DiscoveryTrack>, String> {
         .get("https://api.deezer.com/chart")
         .send()
         .and_then(|r| r.error_for_status())
-        .map_err(|e| format!("Deezer 차트 요청 실패: {e}"))?;
+        .map_err(|e| map_request_error("Deezer 차트 요청", e))?;
     let parsed: DeezerChartResponse = resp
         .json()
         .map_err(|e| format!("Deezer 응답 파싱 실패: {e}"))?;
@@ -89,7 +97,7 @@ pub fn search(query: &str) -> Result<Vec<DiscoveryTrack>, String> {
         .query(&[("q", query)])
         .send()
         .and_then(|r| r.error_for_status())
-        .map_err(|e| format!("Deezer 검색 요청 실패: {e}"))?;
+        .map_err(|e| map_request_error("Deezer 검색 요청", e))?;
     let parsed: DeezerTrackListResponse = resp
         .json()
         .map_err(|e| format!("Deezer 응답 파싱 실패: {e}"))?;
@@ -104,7 +112,7 @@ pub fn releases() -> Result<Vec<DiscoveryTrack>, String> {
         .get("https://api.deezer.com/editorial/0/charts")
         .send()
         .and_then(|r| r.error_for_status())
-        .map_err(|e| format!("Deezer 신보 요청 실패: {e}"))?;
+        .map_err(|e| map_request_error("Deezer 신보 요청", e))?;
     let parsed: DeezerChartResponse = resp
         .json()
         .map_err(|e| format!("Deezer 응답 파싱 실패: {e}"))?;

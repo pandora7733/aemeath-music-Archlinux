@@ -4,6 +4,7 @@ import {
   discoveryReleases,
   discoverySearch,
 } from "../lib/tauri";
+import { normalizeDiscoveryError } from "../lib/networkError";
 import type { DiscoveryTrack } from "../types/media";
 
 type DiscoveryMode = "charts" | "releases";
@@ -73,7 +74,8 @@ export function useDiscovery(mode: DiscoveryMode) {
       const result = await fetchDiscovery(mode, { force: options?.force ?? true });
       setTracks(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(normalizeDiscoveryError(message));
       setTracks([]);
     } finally {
       if (!options?.silent) {
@@ -123,7 +125,8 @@ export function useDiscoverySearch(query: string) {
         })
         .catch((err) => {
           if (!cancelled) {
-            setError(err instanceof Error ? err.message : String(err));
+            const message = err instanceof Error ? err.message : String(err);
+            setError(normalizeDiscoveryError(message));
             setTracks([]);
           }
         })
