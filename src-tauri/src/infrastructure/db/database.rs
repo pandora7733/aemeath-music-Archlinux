@@ -37,27 +37,7 @@ impl Database {
 
     fn run_migrations(&self) -> Result<(), String> {
         let conn = self.lock()?;
-        ensure_legacy_tracks_columns(&conn)?;
-        ensure_legacy_playlists_columns(&conn)?;
-
-        let sql = include_str!("migrations/001_init.sql");
-        conn.execute_batch(sql)
-            .map_err(|e| format!("마이그레이션 실패: {e}"))?;
-
-        // Backfill for legacy rows: if added_at was newly introduced, keep a
-        // sensible ordering by reusing modified_at when added_at == 0.
-        conn.execute(
-            "UPDATE tracks SET added_at = modified_at WHERE added_at = 0",
-            [],
-        )
-        .map_err(|e| format!("tracks.added_at 보정 실패: {e}"))?;
-        conn.execute(
-            "UPDATE playlists SET updated_at = created_at WHERE updated_at = 0",
-            [],
-        )
-        .map_err(|e| format!("playlists.updated_at 보정 실패: {e}"))?;
-
-        Ok(())
+        migrate(&conn)
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
@@ -128,9 +108,11 @@ impl Database {
             .filter_map(|r| r.ok())
             .collect();
 
+        let existing: HashSet<&str> = existing_paths.iter().map(String::as_str).collect();
+
         let mut removed = 0;
         for (id, path) in rows {
-            if !existing_paths.contains(&path) {
+            if !existing.contains(path.as_str()) {
                 conn.execute("DELETE FROM tracks WHERE id = ?1", params![id])
                     .map_err(|e| format!("트랙 삭제 실패: {e}"))?;
                 removed += 1;
@@ -463,6 +445,32 @@ impl Database {
     }
 }
 
+/// Runs schema migrations against a connection. Kept as a free function so it
+/// can be exercised directly in tests against a legacy in-memory database.
+fn migrate(conn: &Connection) -> Result<(), String> {
+    ensure_legacy_tracks_columns(conn)?;
+    ensure_legacy_playlists_columns(conn)?;
+
+    let sql = include_str!("migrations/001_init.sql");
+    conn.execute_batch(sql)
+        .map_err(|e| format!("마이그레이션 실패: {e}"))?;
+
+    // Backfill for legacy rows: if added_at was newly introduced, keep a
+    // sensible ordering by reusing modified_at when added_at == 0.
+    conn.execute(
+        "UPDATE tracks SET added_at = modified_at WHERE added_at = 0",
+        [],
+    )
+    .map_err(|e| format!("tracks.added_at 보정 실패: {e}"))?;
+    conn.execute(
+        "UPDATE playlists SET updated_at = created_at WHERE updated_at = 0",
+        [],
+    )
+    .map_err(|e| format!("playlists.updated_at 보정 실패: {e}"))?;
+
+    Ok(())
+}
+
 fn ensure_legacy_tracks_columns(conn: &Connection) -> Result<(), String> {
     let has_tracks_table: bool = conn
         .query_row(
@@ -486,21 +494,22 @@ fn ensure_legacy_tracks_columns(conn: &Connection) -> Result<(), String> {
         .filter_map(|r| r.ok())
         .collect();
 
-    add_column_if_missing(conn, &columns, "artist", "TEXT")?;
-    add_column_if_missing(conn, &columns, "album", "TEXT")?;
-    add_column_if_missing(conn, &columns, "duration_secs", "INTEGER")?;
+    add_column_if_missing(conn, "tracks", &columns, "artist", "TEXT")?;
+    add_column_if_missing(conn, "tracks", &columns, "album", "TEXT")?;
+    add_column_if_missing(conn, "tracks", &columns, "duration_secs", "INTEGER")?;
     add_column_if_missing(
         conn,
+        "tracks",
         &columns,
         "media_type",
         "TEXT NOT NULL DEFAULT 'audio'",
     )?;
-    add_column_if_missing(conn, &columns, "extension", "TEXT NOT NULL DEFAULT ''")?;
-    add_column_if_missing(conn, &columns, "file_size", "INTEGER NOT NULL DEFAULT 0")?;
-    add_column_if_missing(conn, &columns, "modified_at", "INTEGER NOT NULL DEFAULT 0")?;
-    add_column_if_missing(conn, &columns, "cover_path", "TEXT")?;
-    add_column_if_missing(conn, &columns, "added_at", "INTEGER NOT NULL DEFAULT 0")?;
-    add_column_if_missing(conn, &columns, "source", "TEXT NOT NULL DEFAULT 'local'")?;
+    add_column_if_missing(conn, "tracks", &columns, "extension", "TEXT NOT NULL DEFAULT ''")?;
+    add_column_if_missing(conn, "tracks", &columns, "file_size", "INTEGER NOT NULL DEFAULT 0")?;
+    add_column_if_missing(conn, "tracks", &columns, "modified_at", "INTEGER NOT NULL DEFAULT 0")?;
+    add_column_if_missing(conn, "tracks", &columns, "cover_path", "TEXT")?;
+    add_column_if_missing(conn, "tracks", &columns, "added_at", "INTEGER NOT NULL DEFAULT 0")?;
+    add_column_if_missing(conn, "tracks", &columns, "source", "TEXT NOT NULL DEFAULT 'local'")?;
 
     Ok(())
 }
@@ -528,15 +537,18 @@ fn ensure_legacy_playlists_columns(conn: &Connection) -> Result<(), String> {
         .filter_map(|r| r.ok())
         .collect();
 
-    add_column_if_missing(conn, &columns, "description", "TEXT")?;
-    add_column_if_missing(conn, &columns, "created_at", "INTEGER NOT NULL DEFAULT 0")?;
-    add_column_if_missing(conn, &columns, "updated_at", "INTEGER NOT NULL DEFAULT 0")?;
+    add_column_if_missing(conn, "playlists", &columns, "description", "TEXT")?;
+    add_column_if_missing(conn, "playlists", &columns, "created_at", "INTEGER NOT NULL DEFAULT 0")?;
+    add_column_if_missing(conn, "playlists", &columns, "updated_at", "INTEGER NOT NULL DEFAULT 0")?;
 
     Ok(())
 }
 
+/// Adds a column to `table` when it is not already present. `columns` must be
+/// the current column set of `table`.
 fn add_column_if_missing(
     conn: &Connection,
+    table: &str,
     columns: &HashSet<String>,
     column_name: &str,
     column_sql: &str,
@@ -546,10 +558,10 @@ fn add_column_if_missing(
     }
 
     conn.execute(
-        &format!("ALTER TABLE tracks ADD COLUMN {column_name} {column_sql}"),
+        &format!("ALTER TABLE {table} ADD COLUMN {column_name} {column_sql}"),
         [],
     )
-    .map_err(|e| format!("tracks.{column_name} 컬럼 추가 실패: {e}"))?;
+    .map_err(|e| format!("{table}.{column_name} 컬럼 추가 실패: {e}"))?;
     Ok(())
 }
 
@@ -587,4 +599,97 @@ fn new_id() -> String {
         .unwrap_or(0);
     let seed = format!("{}-{}", nanos, std::process::id());
     blake3::hash(seed.as_bytes()).to_hex().to_string()[..16].to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
+        let mut stmt = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .unwrap();
+        let found = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .any(|name| name == column);
+        found
+    }
+
+    /// Regression test for F-01: migrating a legacy database whose `playlists`
+    /// table predates the `updated_at` column must add the column to
+    /// `playlists` (NOT `tracks`) and leave the DB queryable.
+    #[test]
+    fn legacy_playlists_missing_updated_at_migrates_to_playlists() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE tracks (
+                 id TEXT PRIMARY KEY,
+                 path TEXT NOT NULL UNIQUE,
+                 title TEXT NOT NULL,
+                 extension TEXT NOT NULL
+             );
+             CREATE TABLE playlists (
+                 id TEXT PRIMARY KEY,
+                 name TEXT NOT NULL
+             );
+             INSERT INTO playlists (id, name) VALUES ('p1', 'Old Playlist');",
+        )
+        .unwrap();
+
+        migrate(&conn).expect("legacy migration should succeed");
+
+        assert!(
+            column_exists(&conn, "playlists", "updated_at"),
+            "updated_at must be added to playlists"
+        );
+        assert!(
+            column_exists(&conn, "playlists", "created_at"),
+            "created_at must be added to playlists"
+        );
+        assert!(
+            !column_exists(&conn, "tracks", "updated_at"),
+            "updated_at must NOT leak onto tracks"
+        );
+
+        // The ORDER BY updated_at path that previously failed must now work.
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM (SELECT id FROM playlists ORDER BY updated_at DESC)",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn add_column_if_missing_targets_requested_table() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE tracks (id TEXT PRIMARY KEY);
+             CREATE TABLE playlists (id TEXT PRIMARY KEY);",
+        )
+        .unwrap();
+
+        let existing: HashSet<String> = HashSet::new();
+        add_column_if_missing(&conn, "playlists", &existing, "updated_at", "INTEGER").unwrap();
+
+        assert!(column_exists(&conn, "playlists", "updated_at"));
+        assert!(!column_exists(&conn, "tracks", "updated_at"));
+    }
+
+    #[test]
+    fn fresh_migration_creates_expected_schema() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).expect("fresh migration should succeed");
+
+        for column in ["updated_at", "created_at", "description"] {
+            assert!(column_exists(&conn, "playlists", column));
+        }
+        for column in ["added_at", "source", "cover_path"] {
+            assert!(column_exists(&conn, "tracks", column));
+        }
+    }
 }

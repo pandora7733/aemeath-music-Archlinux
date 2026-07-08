@@ -21,24 +21,37 @@ pub fn scan_directory(root: &Path) -> Result<Vec<MediaItem>, String> {
     }
 
     let mut items = Vec::new();
-    collect_files(root, &mut items)?;
+    collect_files(root, &mut items);
     Ok(items)
 }
 
-fn collect_files(current: &Path, items: &mut Vec<MediaItem>) -> Result<(), String> {
-    let entries = fs::read_dir(current).map_err(|e| {
-        format!(
-            "디렉터리를 읽을 수 없습니다 ({}): {e}",
-            current.display()
-        )
-    })?;
+/// Recursively collects media files. Individual directories or entries that
+/// cannot be read (permission errors, broken symlinks, etc.) are logged and
+/// skipped so that one unreadable path never aborts the whole library scan.
+fn collect_files(current: &Path, items: &mut Vec<MediaItem>) {
+    let entries = match fs::read_dir(current) {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln!(
+                "[scanner] 디렉터리를 건너뜁니다 ({}): {e}",
+                current.display()
+            );
+            return;
+        }
+    };
 
     for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                eprintln!("[scanner] 항목을 건너뜁니다 ({}): {e}", current.display());
+                continue;
+            }
+        };
         let path = entry.path();
 
         if path.is_dir() {
-            collect_files(&path, items)?;
+            collect_files(&path, items);
             continue;
         }
 
@@ -46,8 +59,6 @@ fn collect_files(current: &Path, items: &mut Vec<MediaItem>) -> Result<(), Strin
             items.push(item);
         }
     }
-
-    Ok(())
 }
 
 /// Builds a `MediaItem` from a file path, reading embedded tags for audio files
@@ -132,4 +143,64 @@ pub fn hash_path(path: &str) -> String {
 
 pub fn default_scan_roots() -> Vec<PathBuf> {
     vec![crate::services::paths::music_dir()]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unique_temp_dir(tag: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir()
+            .join(format!("aemeath_scan_{tag}_{}_{nanos}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn scan_collects_nested_audio_and_skips_non_media() {
+        let root = unique_temp_dir("nested");
+        fs::write(root.join("a.mp3"), b"not really audio").unwrap();
+        let sub = root.join("sub");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("b.flac"), b"not really audio").unwrap();
+        fs::write(root.join("ignore.txt"), b"text").unwrap();
+
+        let items = scan_directory(&root).unwrap();
+        let titles: Vec<String> = items.iter().map(|i| i.title.clone()).collect();
+
+        assert_eq!(items.len(), 2, "expected 2 media files, got {titles:?}");
+        assert!(titles.contains(&"a".to_string()));
+        assert!(titles.contains(&"b".to_string()));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// Regression test for F-05: an unreadable subdirectory must be skipped
+    /// rather than aborting the entire scan.
+    #[cfg(unix)]
+    #[test]
+    fn scan_skips_unreadable_subdirectory() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = unique_temp_dir("perm");
+        fs::write(root.join("ok.mp3"), b"x").unwrap();
+        let locked = root.join("locked");
+        fs::create_dir_all(&locked).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let result = scan_directory(&root);
+
+        // Restore permissions so cleanup can proceed regardless of the outcome.
+        let _ = fs::set_permissions(&locked, fs::Permissions::from_mode(0o755));
+
+        let items = result.expect("scan should not fail on an unreadable subdir");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "ok");
+
+        let _ = fs::remove_dir_all(&root);
+    }
 }

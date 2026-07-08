@@ -28,7 +28,8 @@ pub fn scan_library(state: &AppState, roots: Option<Vec<PathBuf>>) -> Result<usi
         collected.append(&mut items);
     }
 
-    collected.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    // Ordering is handled by SQL (`ORDER BY`) at query time, so we don't sort
+    // here; persisting order has no effect on later reads.
 
     let existing_paths: Vec<String> = collected.iter().map(|item| item.path.clone()).collect();
     state.db.upsert_tracks(&collected)?;

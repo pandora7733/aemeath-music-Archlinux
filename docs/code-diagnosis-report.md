@@ -5,6 +5,8 @@
 - 리뷰 범위: `src/` (프론트엔드), `src-tauri/src/` (백엔드), 빌드/설정 파일. 산출물(`dist/`, `src-tauri/target/`)과 `.git/`은 제외
 - 목적: 코드 전반의 품질과 안정성 확보, 유지보수성 향상
 
+> 참고: 본 보고서의 일부 항목은 이미 수정되었습니다. 어떤 항목이 어떻게 처리됐는지는 [11. 부록: 적용된 수정 이력](#11-부록-적용된-수정-이력)을 참고하세요. 각 항목 제목의 상태 배지(`[수정됨]`)로도 표시했습니다.
+
 ---
 
 ## 1. 요약 (Executive Summary)
@@ -62,7 +64,7 @@ flowchart LR
 
 ## 3. P0 — 즉시 수정 권장
 
-### F-01. 레거시 `playlists` 마이그레이션이 엉뚱한 테이블(`tracks`)을 변경
+### F-01. 레거시 `playlists` 마이그레이션이 엉뚱한 테이블(`tracks`)을 변경 [수정됨]
 
 `ensure_legacy_playlists_columns()`는 공용 헬퍼 `add_column_if_missing()`을 호출하지만, 이 헬퍼는 컬럼명과 무관하게 **항상 `ALTER TABLE tracks`** 를 실행합니다.
 
@@ -175,7 +177,7 @@ default-src 'self'; img-src 'self' asset: https://e-cdns-images.dzcdn.net https:
 
 ## 4. P1 — 안정성 / 견고성
 
-### F-05. 스캐너가 하위 디렉터리 오류 하나로 전체 스캔 실패
+### F-05. 스캐너가 하위 디렉터리 오류 하나로 전체 스캔 실패 [수정됨]
 
 파일: `src-tauri/src/infrastructure/scanner.rs`
 
@@ -245,7 +247,7 @@ WAL 모드라도 모든 읽기/쓰기가 하나의 락으로 직렬화됩니다.
 
 **권장 수정**: 릴리스와 함께 배포되는 `SHA2-512SUMS`로 체크섬 검증 후 설치. (blake3는 이미 의존성에 있으나 여기서는 공식 해시 포맷 검증이 필요.)
 
-### F-10. 외부 다운로드 경로/템플릿 검증 부족
+### F-10. 외부 다운로드 경로/템플릿 검증 부족 [부분 수정됨]
 
 파일: `src-tauri/src/services/download.rs`
 ```rust
@@ -308,7 +310,7 @@ const loadAndPlay = useCallback(async (track) => {
 
 ## 6. P3 — 성능 / 로직 최적화
 
-### F-16. `prune_missing_local`의 O(n²) 조회
+### F-16. `prune_missing_local`의 O(n²) 조회 [수정됨]
 파일: `src-tauri/src/infrastructure/db/database.rs`
 ```rust
 for (id, path) in rows {
@@ -317,7 +319,7 @@ for (id, path) in rows {
 ```
 `existing_paths`를 `HashSet<String>`으로 만들면 O(n)으로 개선됩니다.
 
-### F-17. `scan_library`의 불필요한 정렬
+### F-17. `scan_library`의 불필요한 정렬 [수정됨]
 파일: `src-tauri/src/services/library.rs` — `collected.sort_by(...)` 후 저장하지만, 실제 정렬은 `list_tracks`의 SQL `ORDER BY`가 담당하므로 저장 전 정렬은 낭비입니다. 제거 가능.
 
 ### F-18. 오디오 재생 위치가 벽시계(`Instant`) 기반이라 드리프트 가능
@@ -396,3 +398,46 @@ clippy 경고 3건은 기능/안정성과 무관한 스타일 수준입니다.
 - `sort_by` 대신 `sort_by_key` 권장 2건 (`library.rs`, `download.rs`의 정렬부. F-17과 함께 정리 가능)
 
 즉, **현재 코드는 빌드/타입 관점에서 깨끗하며, 본 보고서의 지적들은 컴파일러가 잡지 못하는 런타임 정확성·경계 안전성·구조 문제**에 집중되어 있습니다. 참고로 파일/라인 참조는 리뷰 시점 소스 기준이라 이후 편집으로 달라질 수 있습니다.
+
+---
+
+## 11. 부록: 적용된 수정 이력
+
+보고서 작성 이후, 우선순위가 높고 독립적으로 안전하게 반영 가능한 항목들을 실제로 수정하고 회귀 테스트를 추가했습니다.
+
+### 11.1 수정된 발견사항
+
+| ID | 조치 | 파일 | 테스트 |
+|----|------|------|--------|
+| F-01 | `add_column_if_missing`에 대상 테이블 인자 추가, `playlists` 마이그레이션이 `playlists`를 변경하도록 수정. 마이그레이션 로직을 free `migrate()`로 분리 | `src-tauri/src/infrastructure/db/database.rs` | 레거시 스키마 마이그레이션 3종 |
+| F-05 | `collect_files`가 `Result`를 반환하지 않고, 읽을 수 없는 디렉터리/항목은 로그 후 건너뛰도록 변경 | `src-tauri/src/infrastructure/scanner.rs` | 중첩 스캔 + 권한 없는 하위 디렉터리 스킵 2종 |
+| F-10 | `validate_output_template()` 추가(절대경로/`..`/루트 거부), 저장·다운로드 시점 모두에서 검증 | `src-tauri/src/services/download.rs` | 정상/traversal 템플릿 3종 |
+| F-16 | `prune_missing_local`의 선형 탐색을 `HashSet` 조회로 변경(O(n²)→O(n)) | `src-tauri/src/infrastructure/db/database.rs` | (동작 보존 변경) |
+| F-17 | 저장 전 불필요한 `sort_by` 제거 | `src-tauri/src/services/library.rs` | - |
+| (F-02 일부) | 다운로드 취소를 크로스 플랫폼 `terminate_process()`로 추출(Unix `kill` / Windows `taskkill`) | `src-tauri/src/services/download.rs` | - |
+
+> F-10을 "부분 수정"으로 표기한 이유: `output_template`은 완전히 검증하지만, `download_dir` 자체의 신뢰 범위 정책(예: 홈 디렉터리 하위로 제한)은 제품 결정이 필요해 열어두었습니다.
+
+### 11.2 추가된 기능: 창 닫기 시 완전 종료
+
+메인 창의 네이티브 닫기 버튼(우상단) 클릭 시, 진행 중인 yt-dlp 자식 프로세스를 모두 종료하고 앱 프로세스 전체를 종료하도록 했습니다. 기존에는 설정상 숨김 `mini` 창이 존재해 메인 창만 닫아도 앱이 백그라운드에 남을 수 있었습니다.
+
+- `DownloadService::shutdown()` 추가: 추적 중인 모든 다운로드 PID에 종료 신호(best-effort)
+- `lib.rs`의 `on_window_event`에서 `main` 창 `CloseRequested` 감지 → `downloads.shutdown()` 후 `app.exit(0)`
+
+파일: `src-tauri/src/lib.rs`, `src-tauri/src/services/download.rs`
+
+### 11.3 수정 후 재검증
+
+| 검증 | 명령 | 결과 |
+|------|------|------|
+| Rust 테스트 | `cargo test` | 통과 (8 passed) |
+| Rust 린트 | `cargo clippy --all-targets` | 통과, 경고 0건 |
+| Rust 컴파일 | `cargo check` | 통과 |
+| 타입 체크 | `npx tsc --noEmit` | 통과 |
+
+보고서 10절에서 언급한 clippy 경고 3건은 이번 수정 과정에서 모두 해소되어 현재 0건입니다.
+
+### 11.4 남은 권장 항목
+
+아직 반영하지 않은 항목(제품 결정/광범위 리팩터링이 필요)은 다음과 같습니다: F-02(멀티 OS 배포 자산 분기), F-03/F-04/F-09(경계·CSP·무결성), F-06/F-08/F-11(로깅·풀·에러 노출), F-07(증분 스캔), F-12~F-15(구조/테스트/오류 모델), F-18/F-19(오디오 최적화).

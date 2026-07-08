@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use rodio::Source;
@@ -200,7 +200,7 @@ impl Source for SymphoniaSource {
     }
 }
 
-pub fn open_and_seek(path: &PathBuf, position_secs: f64) -> Result<(SymphoniaSource, f64), String> {
+pub fn open_and_seek(path: &Path, position_secs: f64) -> Result<(SymphoniaSource, f64), String> {
     let source = SymphoniaSource::open(path, position_secs)?;
     let duration = source.duration_secs;
     Ok((source, duration))

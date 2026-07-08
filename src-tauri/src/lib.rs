@@ -69,6 +69,20 @@ pub fn run() {
             commands::player::player_seek,
             commands::player::player_get_state,
         ])
+        .on_window_event(|window, event| {
+            // Closing the main window fully quits the app: terminate any
+            // in-flight yt-dlp downloads and exit the whole process so no
+            // hidden windows or orphaned child processes are left behind.
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if window.label() == "main" {
+                    let app = window.app_handle();
+                    if let Some(state) = app.try_state::<AppState>() {
+                        state.downloads.shutdown();
+                    }
+                    app.exit(0);
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -91,7 +91,7 @@ impl DownloadService {
             .lock()
             .map_err(|_| "다운로드 큐 잠금에 실패했습니다.".to_string())?;
         let mut values: Vec<DownloadTask> = tasks.values().cloned().collect();
-        values.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        values.sort_by_key(|task| std::cmp::Reverse(task.created_at));
         Ok(values)
     }
 
@@ -108,17 +108,26 @@ impl DownloadService {
             .remove(id);
 
         if let Some(pid) = pid {
-            let status = std::process::Command::new("kill")
-                .arg("-TERM")
-                .arg(pid.to_string())
-                .status()
-                .map_err(|e| format!("다운로드 취소 실패: {e}"))?;
+            let status = terminate_process(pid).map_err(|e| format!("다운로드 취소 실패: {e}"))?;
             if !status.success() {
                 return Err("다운로드 취소 신호 전송에 실패했습니다.".to_string());
             }
         }
 
         Ok(())
+    }
+
+    /// Best-effort termination of every in-flight yt-dlp child process. Called
+    /// when the app is quitting so no orphaned downloader/ffmpeg processes are
+    /// left running after the window closes.
+    pub fn shutdown(&self) {
+        let pids: Vec<u32> = match self.pids.lock() {
+            Ok(mut map) => map.drain().map(|(_, pid)| pid).collect(),
+            Err(_) => return,
+        };
+        for pid in pids {
+            let _ = terminate_process(pid);
+        }
     }
 
     fn upsert_task(&self, task: DownloadTask) -> Result<(), String> {
@@ -145,7 +154,11 @@ impl DownloadService {
             return Err("yt-dlp가 설치되지 않았습니다. 먼저 다운로더를 설치하세요.".to_string());
         }
         let external_settings = match kind {
-            DownloadKind::ExternalUrl => Some(load_external_settings()?),
+            DownloadKind::ExternalUrl => {
+                let settings = load_external_settings()?;
+                validate_output_template(&settings.output_template)?;
+                Some(settings)
+            }
             DownloadKind::SearchQuery => None,
         };
 
@@ -316,6 +329,59 @@ fn new_task_id(query: &str, now: i64) -> String {
     blake3::hash(seed.as_bytes()).to_hex().to_string()[..16].to_string()
 }
 
+/// Validates a yt-dlp output template so a download cannot escape its intended
+/// base directory. The template must be a relative path without `..` segments.
+fn validate_output_template(template: &str) -> Result<(), String> {
+    let trimmed = template.trim();
+    if trimmed.is_empty() {
+        return Err("출력 형식을 입력하세요.".to_string());
+    }
+
+    let path = std::path::Path::new(trimmed);
+    if path.is_absolute() {
+        return Err("출력 형식은 상대 경로여야 합니다.".to_string());
+    }
+
+    for component in path.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                return Err("출력 형식에 상위 경로(..)를 사용할 수 없습니다.".to_string());
+            }
+            std::path::Component::Prefix(_) | std::path::Component::RootDir => {
+                return Err("출력 형식은 상대 경로여야 합니다.".to_string());
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+/// Sends a terminate signal to a child process by pid, in a cross-platform way.
+fn terminate_process(pid: u32) -> std::io::Result<std::process::ExitStatus> {
+    #[cfg(unix)]
+    {
+        std::process::Command::new("kill")
+            .arg("-TERM")
+            .arg(pid.to_string())
+            .status()
+    }
+    #[cfg(windows)]
+    {
+        std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .status()
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = pid;
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "이 플랫폼에서는 프로세스 종료를 지원하지 않습니다.",
+        ))
+    }
+}
+
 fn settings_file_path() -> PathBuf {
     paths::data_dir().join("external_download_settings.json")
 }
@@ -342,9 +408,7 @@ fn save_external_settings(
     if normalized.download_dir.is_empty() {
         return Err("저장 경로를 입력하세요.".to_string());
     }
-    if normalized.output_template.is_empty() {
-        return Err("출력 형식을 입력하세요.".to_string());
-    }
+    validate_output_template(&normalized.output_template)?;
 
     let base_dir = PathBuf::from(&normalized.download_dir);
     std::fs::create_dir_all(&base_dir)
@@ -361,4 +425,31 @@ fn save_external_settings(
         .map_err(|e| format!("외부 다운로드 설정 저장 실패 ({}): {e}", path.display()))?;
 
     Ok(normalized)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_output_template_is_accepted() {
+        let default = ExternalDownloadSettings::default();
+        assert!(validate_output_template(&default.output_template).is_ok());
+    }
+
+    #[test]
+    fn plain_relative_templates_are_accepted() {
+        assert!(validate_output_template("%(title)s.%(ext)s").is_ok());
+        assert!(validate_output_template("%(uploader)s/%(title)s.%(ext)s").is_ok());
+    }
+
+    /// Regression test for F-10: templates that could escape the base dir are
+    /// rejected.
+    #[test]
+    fn traversal_and_absolute_templates_are_rejected() {
+        assert!(validate_output_template("").is_err());
+        assert!(validate_output_template("../%(title)s.%(ext)s").is_err());
+        assert!(validate_output_template("a/../../%(title)s.%(ext)s").is_err());
+        assert!(validate_output_template("/etc/%(title)s").is_err());
+    }
 }

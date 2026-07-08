@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -58,7 +58,7 @@ impl LocalEngine {
         }
     }
 
-    fn start_at(&mut self, path: &PathBuf, position_secs: f64) -> Result<f64, String> {
+    fn start_at(&mut self, path: &Path, position_secs: f64) -> Result<f64, String> {
         if let Some(sink) = self.sink.take() {
             sink.stop();
         }
@@ -70,7 +70,7 @@ impl LocalEngine {
         sink.append(source);
 
         self.sink = Some(sink);
-        self.current_path = Some(path.clone());
+        self.current_path = Some(path.to_path_buf());
         if duration_secs > 0.0 {
             self.duration_secs = duration_secs;
         }
@@ -81,7 +81,7 @@ impl LocalEngine {
         Ok(self.duration_secs)
     }
 
-    fn play(&mut self, path: &PathBuf) -> Result<f64, String> {
+    fn play(&mut self, path: &Path) -> Result<f64, String> {
         self.start_at(path, 0.0)
     }
 
